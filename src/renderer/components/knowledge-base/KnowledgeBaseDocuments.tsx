@@ -240,7 +240,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
       'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'text/csv',
-      'application/epub+zip',
+      ...(platform.type === 'mobile' ? [] : ['application/epub+zip']),
     ]
     const extendedDocumentMimeTypes = [
       'application/msword',
