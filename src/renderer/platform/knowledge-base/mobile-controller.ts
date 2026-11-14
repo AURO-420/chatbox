@@ -118,9 +118,9 @@ function toTextBase64(value: string): string {
 
 export function safeKnowledgeBaseFileName(value: string): string {
   return [...value]
-    .filter((character) => {
+    .map((character) => {
       const code = character.charCodeAt(0)
-      return code >= 32 && code !== 127 && !/[\\/:*?"<>|]/.test(character)
+      return code < 32 || code === 127 || /[\\/:*?"<>|]/.test(character) ? '_' : character
     })
     .join('')
     .slice(-120) || 'document'
