@@ -14,13 +14,15 @@ import {
   ScrollArea,
   Stack,
   Text,
+  Textarea,
 } from '@mantine/core'
 import {
   KNOWLEDGE_BASE_MAX_FILE_SIZE,
   KNOWLEDGE_BASE_MAX_FILE_SIZE_LABEL,
   KNOWLEDGE_BASE_PARSED_CONTENT_TOO_LARGE_ERROR,
 } from '@shared/knowledge-base'
-import type { FileMeta, KnowledgeBase } from '@shared/types'
+import type { FileMeta, KnowledgeBase, KnowledgeBaseFile } from '@shared/types'
+import { isPdfFilePath, isTextFilePath } from '@shared/file-extensions'
 import { formatFileSize } from '@shared/utils'
 import {
   IconCheck,
@@ -29,6 +31,7 @@ import {
   IconCircleCheck,
   IconExclamationCircle,
   IconFile,
+  IconEdit,
   IconLoader,
   IconPlayerPause,
   IconPlayerPlay,
@@ -45,6 +48,7 @@ import { trackJkClickEvent } from '@/analytics/jk'
 import { JK_EVENTS, JK_PAGE_NAMES } from '@/analytics/jk-events'
 import { bucketPlausibleCount } from '@/analytics/plausible'
 import { AppTooltip as Tooltip } from '@/components/ui/tooltip'
+import { Modal } from '@/components/layout/Overlay'
 import { useKnowledgeBaseFiles, useKnowledgeBaseFilesActions, useKnowledgeBaseFilesCount } from '@/hooks/knowledge-base'
 import { useChunksPreview } from '@/hooks/useChunksPreview'
 import { toastError } from '@/packages/toast'
@@ -77,6 +81,10 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
   const [showUploadArea, setShowUploadArea] = useState(false)
   const [showRemoteRetryModal, setShowRemoteRetryModal] = useState(false)
   const [sizeRejectedFiles, setSizeRejectedFiles] = useState<RejectedFile[]>([])
+  const [editingDocument, setEditingDocument] = useState<KnowledgeBaseFile | null>(null)
+  const [editingContent, setEditingContent] = useState('')
+  const [isLoadingEditContent, setIsLoadingEditContent] = useState(false)
+  const [isSavingEditContent, setIsSavingEditContent] = useState(false)
 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const globalDocumentParserType = useSettingsStore((state) => state.extension?.documentParser?.type)
@@ -458,6 +466,60 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
     },
     [uploadFiles, validateFileType, getSupportedFileTypes, t]
   )
+
+  // Mobile knowledge-base editing works on the extracted text. PDF / Word originals are kept intact;
+  // the edited extraction is exported as a separate Markdown document.
+  const handleEditDocument = useCallback(async (doc: KnowledgeBaseFile) => {
+    const controller = platform.getKnowledgeBaseController()
+    if (!controller.readFileContent || !controller.saveFileContent) {
+      toastError(t('File editing is not available on this platform.'))
+      return
+    }
+    setEditingDocument(doc)
+    setEditingContent('')
+    setIsLoadingEditContent(true)
+    try {
+      const content = await controller.readFileContent(doc.id)
+      if (content === null) throw new Error(t('The extracted document text is not available yet.'))
+      setEditingContent(content)
+    } catch (error) {
+      toastError((error as Error)?.message || t('Failed to open the document editor.'))
+      setEditingDocument(null)
+    } finally {
+      setIsLoadingEditContent(false)
+    }
+  }, [t])
+
+  const handleSaveDocumentEdit = useCallback(async () => {
+    if (!editingDocument) return
+    const controller = platform.getKnowledgeBaseController()
+    if (!controller.saveFileContent) return
+
+    if (/\\.json$/i.test(editingDocument.filename)) {
+      try {
+        JSON.parse(editingContent)
+      } catch (error) {
+        toastError(t('Invalid JSON: {{error}}', { error: (error as Error).message }))
+        return
+      }
+    }
+
+    setIsSavingEditContent(true)
+    try {
+      await controller.saveFileContent(editingDocument.id, editingContent)
+      if (isPdfFilePath(editingDocument.filename) || /\\.docx$/i.test(editingDocument.filename)) {
+        const baseName = editingDocument.filename.replace(/\\.[^.]+$/, '')
+        await platform.exporter.exportTextFile(baseName + '.edited.md', editingContent)
+      }
+      setEditingDocument(null)
+      await Promise.all([refetch(), refetchCount()])
+      if (knowledgeBase?.id) invalidateFiles(knowledgeBase.id)
+    } catch (error) {
+      toastError((error as Error)?.message || t('Failed to save and re-index the edited document.'))
+    } finally {
+      setIsSavingEditContent(false)
+    }
+  }, [editingDocument, editingContent, refetch, refetchCount, invalidateFiles, knowledgeBase?.id, t])
 
   // Handle file deletion
   const handleDeleteFile = useCallback(
@@ -1007,6 +1069,19 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
                                 <IconRefresh size={14} />
                               </ActionIcon>
                             )}
+                            {platform.type === 'mobile' &&
+                              doc.status === 'done' &&
+                              (isTextFilePath(doc.filename) || isPdfFilePath(doc.filename) || /\\.docx$/i.test(doc.filename)) && (
+                                <ActionIcon
+                                  variant="subtle"
+                                  color="blue"
+                                  size="sm"
+                                  onClick={() => handleEditDocument(doc)}
+                                  title={t('Edit extracted text')}
+                                >
+                                  <IconEdit size={14} />
+                                </ActionIcon>
+                              )}
                             {doc.status === 'processing' && (
                               <ActionIcon
                                 variant="subtle"
@@ -1100,6 +1175,46 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
         file={chunksPreview.selectedFile}
         knowledgeBaseId={knowledgeBase?.id}
       />
+
+      <Modal
+        opened={editingDocument !== null}
+        onClose={() => {
+          if (!isSavingEditContent) setEditingDocument(null)
+        }}
+        title={editingDocument ? t('Edit {{filename}}', { filename: editingDocument.filename }) : t('Edit document')}
+        size="xl"
+        centered
+      >
+        <Stack gap="sm">
+          <Alert color="blue" variant="light">
+            {editingDocument && (isPdfFilePath(editingDocument.filename) || /\\.docx$/i.test(editingDocument.filename)
+              ? t('You are editing extracted text. The original PDF / Word file will be kept unchanged; a new Markdown file will be exported after indexing succeeds.')
+              : t('The source text file will be updated after the new knowledge-base index is ready. JSON files are validated before saving.'))}
+          </Alert>
+          {isLoadingEditContent ? (
+            <Center py="xl"><Loader size="sm" /></Center>
+          ) : (
+            <Textarea
+              value={editingContent}
+              onChange={(event) => setEditingContent(event.currentTarget.value)}
+              minRows={18}
+              maxRows={26}
+              autosize
+              styles={{ input: { fontFamily: 'monospace', fontSize: '13px' } }}
+              disabled={isSavingEditContent}
+              aria-label={t('Document text')}
+            />
+          )}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setEditingDocument(null)} disabled={isSavingEditContent}>
+              {t('Cancel')}
+            </Button>
+            <Button onClick={handleSaveDocumentEdit} loading={isSavingEditContent} disabled={isLoadingEditContent}>
+              {t('Save and rebuild index')}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {/* Remote Retry Modal */}
       <RemoteRetryModal
