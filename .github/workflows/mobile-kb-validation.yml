@@ -1,0 +1,48 @@
+name: Mobile Knowledge Base Validation
+
+on:
+  push:
+    branches:
+      - feature/mobile-kb-file-editor
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.1
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check changed TypeScript and UI files
+        run: >
+          pnpm exec biome check
+          src/renderer/platform/knowledge-base/interface.ts
+          src/renderer/platform/knowledge-base/mobile-controller.ts
+          src/renderer/platform/knowledge-base/mobile-controller.test.ts
+          src/renderer/platform/mobile_platform.ts
+          src/renderer/components/knowledge-base/KnowledgeBase.tsx
+          src/renderer/components/knowledge-base/KnowledgeBaseDocuments.tsx
+
+      - name: Type-check the application
+        run: pnpm run check
+
+      - name: Run mobile knowledge-base unit tests
+        run: pnpm exec vitest run src/renderer/platform/knowledge-base/mobile-controller.test.ts
