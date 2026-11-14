@@ -109,9 +109,7 @@ export function getSettingsNavGroups(): SettingsNavGroup[] {
       title: 'App',
       items: [
         { key: 'appearance', label: 'Appearance', icon: IconPalette, testId: TestId.settings.navAppearance },
-        ...(platform.type === 'mobile'
-          ? []
-          : [{ key: 'hotkeys' as const, label: 'Keyboard Shortcuts', icon: IconKeyboard }]),
+        { key: 'hotkeys', label: 'Keyboard Shortcuts', icon: IconKeyboard },
         { key: 'data', label: 'Data & Backup', icon: IconDatabase, testId: TestId.settings.navData },
         { key: 'advanced', label: 'Advanced', icon: IconTool, testId: TestId.settings.navAdvanced },
         { key: 'about', label: 'About & Updates', icon: IconInfoCircle, testId: TestId.settings.navAbout },
