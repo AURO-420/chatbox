@@ -479,14 +479,14 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
       toastError(t('Replacing knowledge-base files is not available on this platform.'))
       return
     }
-    const extension = doc.filename.toLowerCase().match(/\\.[^.]+$/)?.[0]
+    const extension = doc.filename.slice(doc.filename.lastIndexOf('.')).toLowerCase()
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = extension || '.pdf,.docx'
     input.onchange = async () => {
       const replacement = input.files?.[0]
       if (!replacement) return
-      const replacementExtension = replacement.name.toLowerCase().match(/\\.[^.]+$/)?.[0]
+      const replacementExtension = replacement.name.slice(replacement.name.lastIndexOf('.')).toLowerCase()
       if (extension && replacementExtension !== extension) {
         toastError(t('Choose a replacement file with the same extension ({{extension}}).', { extension }))
         return
@@ -1151,7 +1151,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
                             )}
                             {platform.type === 'mobile' &&
                               doc.status === 'done' &&
-                              (isPdfFilePath(doc.filename) || /\\.docx$/i.test(doc.filename)) && (
+                              (isPdfFilePath(doc.filename) || doc.filename.toLowerCase().endsWith('.docx'))) && (
                                 <ActionIcon
                                   variant="subtle"
                                   color="blue"
