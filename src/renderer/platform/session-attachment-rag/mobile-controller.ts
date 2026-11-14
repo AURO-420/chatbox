@@ -160,16 +160,19 @@ export class MobileSessionAttachmentRagController implements SessionAttachmentRa
     return this.databasePromise
   }
 
-  private async getEmbeddingModel(): Promise<{ model: EmbeddingModel; modelString: string }> {
-    const [{ settingsService }] = await Promise.all([import('@/settings-runtime')])
-    const settings = settingsService.getSettings()
-    const selected = settings.defaultEmbeddingModel
-    const modelString =
-      selected?.provider && selected?.model
-        ? selected.provider + ':' + selected.model
-        : settings.licenseKey
-          ? 'chatbox-ai:text-embedding-3-small'
-          : undefined
+  private async getEmbeddingModel(overrideModelString?: string): Promise<{ model: EmbeddingModel; modelString: string }> {
+    let modelString = overrideModelString
+    if (!modelString) {
+      const [{ settingsService }] = await Promise.all([import('@/settings-runtime')])
+      const settings = settingsService.getSettings()
+      const selected = settings.defaultEmbeddingModel
+      modelString =
+        selected?.provider && selected?.model
+          ? selected.provider + ':' + selected.model
+          : settings.licenseKey
+            ? 'chatbox-ai:text-embedding-3-small'
+            : undefined
+    }
     if (!modelString) {
       throw new Error('Session attachment indexing needs a default embedding model. Configure one in Settings → Default Models.')
     }
@@ -549,44 +552,55 @@ export class MobileSessionAttachmentRagController implements SessionAttachmentRa
     const db = await this.database()
     const placeholders = attachmentIds.map(() => '?').join(',')
     const ready = await db.query(
-      "SELECT id FROM session_attachment WHERE id IN (" + placeholders + ") AND status = 'ready'",
+      "SELECT id, embedding_model FROM session_attachment WHERE id IN (" + placeholders + ") AND status = 'ready'",
       attachmentIds
     )
-    const readyIds = (ready.values ?? []).map((row) => Number(row.id))
-    if (readyIds.length === 0) return []
-    const { model } = await this.getEmbeddingModel()
-    const queryResult = await embedMany({ model, values: [params.query.trim()], maxRetries: 0 })
-    const queryVector = queryResult.embeddings[0]
-    if (!queryVector) return []
-    const readyPlaceholders = readyIds.map(() => '?').join(',')
-    const chunks = await db.query(
-      'SELECT c.attachment_id, c.parent_id, c.chunk_order, c.section_path, c.raw_text, c.embedding, a.filename ' +
-        'FROM session_attachment_chunk c JOIN session_attachment a ON a.id = c.attachment_id ' +
-        'WHERE c.attachment_id IN (' +
-        readyPlaceholders +
-        ')',
-      readyIds
-    )
-    const matches: SessionAttachmentSearchResult[] = []
-    for (const row of chunks.values ?? []) {
-      let vector: number[] = []
-      try {
-        vector = JSON.parse(String(row.embedding)) as number[]
-      } catch {
-        vector = []
-      }
-      const score = cosineSimilarity(queryVector, vector)
-      if (score <= 0) continue
-      matches.push({
-        attachmentId: Number(row.attachment_id),
-        parentId: Number(row.parent_id),
-        filename: String(row.filename ?? ''),
-        sectionPath: row.section_path ? String(row.section_path) : undefined,
-        chunkOrder: Number(row.chunk_order),
-        text: String(row.raw_text ?? ''),
-        score,
-      })
+    const groups = new Map<string, number[]>()
+    for (const row of ready.values ?? []) {
+      const modelString = String(row.embedding_model ?? '')
+      if (!modelString) continue
+      const ids = groups.get(modelString) ?? []
+      ids.push(Number(row.id))
+      groups.set(modelString, ids)
     }
+    if (groups.size === 0) return []
+
+    const matches: SessionAttachmentSearchResult[] = []
+    for (const [modelString, modelAttachmentIds] of groups) {
+      const { model } = await this.getEmbeddingModel(modelString)
+      const queryResult = await embedMany({ model, values: [params.query.trim()], maxRetries: 0 })
+      const queryVector = queryResult.embeddings[0]
+      if (!queryVector) continue
+      const modelPlaceholders = modelAttachmentIds.map(() => '?').join(',')
+      const chunks = await db.query(
+        'SELECT c.attachment_id, c.parent_id, c.chunk_order, c.section_path, c.raw_text, c.embedding, a.filename ' +
+          'FROM session_attachment_chunk c JOIN session_attachment a ON a.id = c.attachment_id ' +
+          'WHERE c.attachment_id IN (' +
+          modelPlaceholders +
+          ')',
+        modelAttachmentIds
+      )
+      for (const row of chunks.values ?? []) {
+        let vector: number[] = []
+        try {
+          vector = JSON.parse(String(row.embedding)) as number[]
+        } catch {
+          vector = []
+        }
+        const score = cosineSimilarity(queryVector, vector)
+        if (score <= 0) continue
+        matches.push({
+          attachmentId: Number(row.attachment_id),
+          parentId: Number(row.parent_id),
+          filename: String(row.filename ?? ''),
+          sectionPath: row.section_path ? String(row.section_path) : undefined,
+          chunkOrder: Number(row.chunk_order),
+          text: String(row.raw_text ?? ''),
+          score,
+        })
+      }
+    }
+
     matches.sort((left, right) => right.score - left.score)
     const { recallTopK, finalTopK } = normalizePlan(params.plan)
     const recalled = matches.slice(0, recallTopK)
