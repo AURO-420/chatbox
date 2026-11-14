@@ -34,7 +34,6 @@ jobs:
           src/renderer/platform/knowledge-base/interface.ts
           src/renderer/platform/knowledge-base/mobile-controller.ts
           src/renderer/platform/knowledge-base/mobile-controller.test.ts
-          src/renderer/platform/mobile_platform.ts
           src/renderer/components/knowledge-base/KnowledgeBase.tsx
           src/renderer/components/knowledge-base/KnowledgeBaseDocuments.tsx
 

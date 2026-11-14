@@ -16,7 +16,7 @@ describe('mobile knowledge-base text utilities', () => {
   })
 
   it('prefers paragraph boundaries when a newline is near the chunk limit', () => {
-    const source = 'a'.repeat(800) + '\n' + 'b'.repeat(900)
+    const source = `${'a'.repeat(800)}\n${'b'.repeat(900)}`
     const chunks = chunkKnowledgeBaseText(source)
     expect(chunks[0]).not.toContain('\n')
     expect(chunks.join('').length).toBeGreaterThan(0)
