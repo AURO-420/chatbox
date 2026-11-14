@@ -557,6 +557,79 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
     this.requestWorker()
   }
 
+  async replaceFile(fileId: number, meta: FileMeta, sourceFile: File): Promise<void> {
+    if (sourceFile.size > KNOWLEDGE_BASE_MAX_FILE_SIZE) {
+      throw new Error('The replacement file exceeds the 50 MB upload limit.')
+    }
+    await this.withFileLock(fileId, async () => {
+      const db = await this.database()
+      const result = await db.query('SELECT * FROM kb_file WHERE id = ?', [fileId])
+      const oldRow = result.values?.[0] as DatabaseRow | undefined
+      if (!oldRow) throw new Error('File not found.')
+      await this.ensureFilesDirectory()
+      const storedPath = `${FILES_DIRECTORY}/${uuidv4()}-${safeKnowledgeBaseFileName(meta.name || sourceFile.name)}`
+      await this.filesystem.writeFile({
+        path: storedPath,
+        directory: Directory.Data,
+        data: toBase64(new Uint8Array(await sourceFile.arrayBuffer())),
+      })
+      try {
+        await db.run(
+          "UPDATE kb_file SET filename = ?, filepath = ?, mime_type = ?, file_size = ?, status = 'pending', " +
+            'error = NULL, processing_started_at = NULL, pending_content = NULL, content_text = NULL, ' +
+            'staging_generation = NULL, staged_chunk_count = 0, total_chunks = 0, parsed_remotely = 0, ' +
+            "parser_type = 'local', use_remote_parsing = 0 WHERE id = ?",
+          [
+            meta.name || sourceFile.name,
+            storedPath,
+            meta.type || sourceFile.type || 'application/octet-stream',
+            sourceFile.size,
+            fileId,
+          ]
+        )
+        await this.processFileUnlocked(fileId)
+        const after = await db.query('SELECT status, error FROM kb_file WHERE id = ?', [fileId])
+        if (String(after.values?.[0]?.status) !== 'done') {
+          throw new Error(String(after.values?.[0]?.error ?? 'The replacement file could not be indexed.'))
+        }
+        const oldPath = String(oldRow.filepath ?? '')
+        if (oldPath && oldPath !== storedPath) {
+          await this.filesystem.deleteFile({ path: oldPath, directory: Directory.Data }).catch(() => undefined)
+        }
+      } catch (error) {
+        await db.run(
+          'UPDATE kb_file SET filename = ?, filepath = ?, mime_type = ?, file_size = ?, chunk_count = ?, ' +
+            'total_chunks = ?, staged_chunk_count = ?, status = ?, error = ?, created_at = ?, ' +
+            'processing_started_at = ?, pending_content = ?, content_text = ?, staging_generation = ?, ' +
+            'parsed_remotely = ?, parser_type = ?, use_remote_parsing = ? WHERE id = ?',
+          [
+            oldRow.filename,
+            oldRow.filepath,
+            oldRow.mime_type,
+            oldRow.file_size,
+            oldRow.chunk_count,
+            oldRow.total_chunks,
+            oldRow.staged_chunk_count,
+            oldRow.status,
+            oldRow.error,
+            oldRow.created_at,
+            oldRow.processing_started_at,
+            oldRow.pending_content,
+            oldRow.content_text,
+            oldRow.staging_generation,
+            oldRow.parsed_remotely,
+            oldRow.parser_type,
+            oldRow.use_remote_parsing,
+            fileId,
+          ]
+        )
+        await db.run('DELETE FROM kb_chunk_staging WHERE file_id = ?', [fileId]).catch(() => undefined)
+        await this.filesystem.deleteFile({ path: storedPath, directory: Directory.Data }).catch(() => undefined)
+        throw error
+      }
+    })
+  }
+
   async deleteFile(fileId: number): Promise<void> {
     await this.withFileLock(fileId, async () => {
       const db = await this.database()
