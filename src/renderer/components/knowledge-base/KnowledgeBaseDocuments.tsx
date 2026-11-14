@@ -489,7 +489,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
     setIsLoadingEditContent(true)
     try {
       const content = await controller.readFileContent(doc.id)
-      if (content === null) throw new Error(t('The extracted document text is not available yet.'))
+      if (content === null) throw new Error(String(t('The extracted document text is not available yet.')))
       setEditingContent(content)
       setEditingPageText(content.slice(0, 100_000))
     } catch (error) {
@@ -1280,7 +1280,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
                 autosize
                 styles={{ input: { fontFamily: 'monospace', fontSize: '13px' } }}
                 disabled={isSavingEditContent}
-                aria-label={t('Document text')}
+                aria-label={String(t('Document text'))}
                 spellCheck={false}
               />
             </>

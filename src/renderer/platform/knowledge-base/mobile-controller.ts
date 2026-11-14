@@ -302,7 +302,10 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
   private async readStoredFile(path: string, filename: string, mimeType: string): Promise<File> {
     const result = await this.filesystem.readFile({ path, directory: Directory.Data })
     const base64 = typeof result.data === 'string' ? result.data : toBase64(new Uint8Array(await result.data.arrayBuffer()))
-    return new File([fromBase64(base64)], filename, { type: mimeType })
+    const bytes = fromBase64(base64)
+    const buffer = new ArrayBuffer(bytes.byteLength)
+    new Uint8Array(buffer).set(bytes)
+    return new File([buffer], filename, { type: mimeType })
   }
 
   private requestWorker(): void {
