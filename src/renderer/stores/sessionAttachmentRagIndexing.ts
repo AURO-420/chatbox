@@ -12,7 +12,7 @@ function shouldIndexPreparedAttachment(
   file: Pick<AttachmentPreparationResult, 'ragMode' | 'storageKey' | 'error' | 'sessionAttachmentAvailability'>
 ) {
   return (
-    platform.type === 'desktop' &&
+    (platform.type === 'desktop' || platform.type === 'mobile') &&
     file.ragMode === 'session-retrieval' &&
     !!file.storageKey &&
     !file.error &&
