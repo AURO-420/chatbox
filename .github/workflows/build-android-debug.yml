@@ -66,6 +66,12 @@ jobs:
       - name: Sync Capacitor
         run: pnpm exec cap sync android
 
+      - name: Configure stable debug signing key
+        run: |
+          mkdir -p "$HOME/.android"
+          base64 --decode android/debug.keystore.b64 > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+
       - name: Assemble Debug APK
         run: |
           cd android
