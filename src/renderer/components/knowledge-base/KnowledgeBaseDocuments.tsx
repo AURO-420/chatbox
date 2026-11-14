@@ -473,7 +473,37 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
     [uploadFiles, validateFileType, getSupportedFileTypes, t]
   )
 
-  // Mobile knowledge-base editing works on the extracted text. PDF / Word originals are kept intact;
+  const handleReplaceDocument = useCallback((doc: KnowledgeBaseFile) => {
+    const controller = platform.getKnowledgeBaseController()
+    if (!controller.replaceFile) {
+      toastError(t('Replacing knowledge-base files is not available on this platform.'))
+      return
+    }
+    const extension = doc.filename.toLowerCase().match(/\\.[^.]+$/)?.[0]
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = extension || '.pdf,.docx'
+    input.onchange = async () => {
+      const replacement = input.files?.[0]
+      if (!replacement) return
+      const replacementExtension = replacement.name.toLowerCase().match(/\\.[^.]+$/)?.[0]
+      if (extension && replacementExtension !== extension) {
+        toastError(t('Choose a replacement file with the same extension ({{extension}}).', { extension }))
+        return
+      }
+      try {
+        await controller.replaceFile(doc.id, correctMimeType(replacement), replacement)
+        toast.success(t('Successfully replaced {{filename}}', { filename: doc.filename }))
+        await Promise.all([refetch(), refetchCount()])
+        if (knowledgeBase?.id) invalidateFiles(knowledgeBase.id)
+      } catch (error) {
+        toastError((error as Error)?.message || t('Failed to replace the knowledge-base file.'))
+      }
+    }
+    input.click()
+  }, [correctMimeType, invalidateFiles, knowledgeBase?.id, refetch, refetchCount, t])
+
+  // Mobile text formats are editable in place. PDF and Word documents use the separate Replace action.
   // the edited extraction is exported as a separate Markdown document.
   const handleEditDocument = useCallback(async (doc: KnowledgeBaseFile) => {
     const controller = platform.getKnowledgeBaseController()
@@ -538,18 +568,6 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
     setIsSavingEditContent(true)
     try {
       await controller.saveFileContent(editingDocument.id, nextContent)
-      if (isPdfFilePath(editingDocument.filename) || /\.docx$/i.test(editingDocument.filename)) {
-        const baseName = editingDocument.filename.replace(/\.[^.]+$/, '')
-        try {
-          await platform.exporter.exportTextFile(`${baseName}.edited.md`, nextContent)
-        } catch (exportError) {
-          toastError(
-            t('The knowledge-base index was updated, but exporting the edited text failed: {{error}}', {
-              error: exportError instanceof Error ? exportError.message : String(exportError),
-            })
-          )
-        }
-      }
       setEditingDocument(null)
       setEditingPageTexts(new Map())
       await Promise.all([refetch(), refetchCount()])
@@ -1120,17 +1138,28 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
                                 <IconRefresh size={14} />
                               </ActionIcon>
                             )}
+                            {platform.type === 'mobile' && doc.status === 'done' && isTextFilePath(doc.filename) && (
+                              <ActionIcon
+                                variant="subtle"
+                                color="blue"
+                                size="sm"
+                                onClick={() => handleEditDocument(doc)}
+                                title={t('Edit file content')}
+                              >
+                                <IconEdit size={14} />
+                              </ActionIcon>
+                            )}
                             {platform.type === 'mobile' &&
                               doc.status === 'done' &&
-                              (isTextFilePath(doc.filename) || isPdfFilePath(doc.filename) || /\.docx$/i.test(doc.filename)) && (
+                              (isPdfFilePath(doc.filename) || /\\.docx$/i.test(doc.filename)) && (
                                 <ActionIcon
                                   variant="subtle"
                                   color="blue"
                                   size="sm"
-                                  onClick={() => handleEditDocument(doc)}
-                                  title={t('Edit extracted text')}
+                                  onClick={() => handleReplaceDocument(doc)}
+                                  title={t('Replace original file')}
                                 >
-                                  <IconEdit size={14} />
+                                  <IconRefresh size={14} />
                                 </ActionIcon>
                               )}
                             {doc.status === 'processing' && (
