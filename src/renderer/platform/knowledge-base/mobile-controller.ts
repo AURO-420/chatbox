@@ -228,7 +228,6 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
     this.injectedDatabase = options.database
     this.embeddingModelFactory = options.embeddingModelFactory ?? this.createEmbeddingModel.bind(this)
     this.parseFile = options.parseFile ?? parseMobileDocument
-    this.requestWorker()
   }
 
   private database(): Promise<SQLiteDBConnection> {
@@ -450,6 +449,7 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
 
   async list(): Promise<KnowledgeBase[]> {
     const db = await this.database()
+    this.requestWorker()
     const result = await db.query('SELECT * FROM knowledge_base ORDER BY created_at DESC, id DESC')
     return (result.values ?? []).map((row) => mapKnowledgeBase(row as DatabaseRow))
   }
