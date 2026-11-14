@@ -8,6 +8,7 @@ import type { PlatformType } from '@/platform/interfaces'
 import { settingsService } from '@/settings-runtime'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
 import * as settingActions from '@/stores/settingActions'
+import { nativeFetch } from '@/native/native-fetch'
 import { apiRequest } from '@/utils/request'
 import { currentBlobStorage } from './CurrentBlobStorage'
 import { type ModelBlobStorage, RendererModelStorageAdapter } from './RendererModelStorageAdapter'
@@ -62,7 +63,10 @@ function createRequestAdapter(
   platformInfo: ModelDependencyPlatformInfo,
   apiRequestClient: RendererApiRequestClient = apiRequest
 ): RequestAdapter {
-  return new RendererRequestAdapter(createAfetch(platformInfo), apiRequestClient)
+  return new RendererRequestAdapter(
+    createAfetch(platformInfo, platformInfo.type === 'mobile' ? nativeFetch : undefined),
+    apiRequestClient
+  )
 }
 
 function getDefaultOAuthIpc(): OAuthIpcInvoker {
