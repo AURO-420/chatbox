@@ -106,7 +106,8 @@ function cosineSimilarity(left: number[], right: number[]): number {
 }
 
 function mapAttachment(row: DatabaseRow): SessionAttachment {
-  const status = String(row.status ?? 'pending') as SessionAttachment['status']
+  const rawStatus = String(row.status ?? 'pending')
+  const status = (rawStatus === 'canceled' ? 'failed' : rawStatus) as SessionAttachment['status']
   return {
     id: Number(row.id),
     sessionId: String(row.session_id ?? ''),
@@ -124,8 +125,8 @@ function mapAttachment(row: DatabaseRow): SessionAttachment {
     indexingStage: row.indexing_stage ? (String(row.indexing_stage) as SessionAttachment['indexingStage']) : undefined,
     parserType: row.parser_type ? String(row.parser_type) : undefined,
     availability: 'allowed',
-    indexStatus: status === 'canceled' ? 'failed' : status,
-    status: status === 'canceled' ? 'failed' : status,
+    indexStatus: status,
+    status,
     error: row.error ? String(row.error) : undefined,
     createdAt: Number(row.created_at ?? Date.now()),
     processingStartedAt: row.processing_started_at == null ? undefined : Number(row.processing_started_at),
@@ -277,13 +278,13 @@ export class MobileSessionAttachmentRagController implements SessionAttachmentRa
           attachmentId,
         ])
         const state = await db.query('SELECT status FROM session_attachment WHERE id = ?', [attachmentId])
-        if (!state.values?.[0] || String(state.values[0].status) === 'canceled') return
+        if (!state.values?.[0]) return
       }
 
       await db.execute('BEGIN TRANSACTION')
       try {
         const state = await db.query('SELECT status FROM session_attachment WHERE id = ?', [attachmentId])
-        if (!state.values?.[0] || String(state.values[0].status) === 'canceled') {
+        if (!state.values?.[0]) {
           await db.execute('ROLLBACK')
           return
         }
@@ -504,7 +505,7 @@ export class MobileSessionAttachmentRagController implements SessionAttachmentRa
           messageId: attachment.messageId,
           filename: attachment.filename,
           parserType: attachment.parserType,
-          status: attachment.status === 'canceled' ? 'failed' : attachment.status,
+          status: attachment.status,
           chunkCount: attachment.chunkCount ?? 0,
           error: attachment.error,
           createdAt: attachment.createdAt,
