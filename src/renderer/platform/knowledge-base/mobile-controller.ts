@@ -1,7 +1,8 @@
-import { Directory, Filesystem, type FilesystemPlugin } from '@capacitor/filesystem'
 import { CapacitorSQLite, SQLiteConnection, type SQLiteDBConnection } from '@capacitor-community/sqlite'
+import { Directory, Filesystem, type FilesystemPlugin } from '@capacitor/filesystem'
 import { embedMany, type EmbeddingModel } from 'ai'
 import { v4 as uuidv4 } from 'uuid'
+import { KNOWLEDGE_BASE_MAX_FILE_SIZE, KNOWLEDGE_BASE_MAX_PARSED_CONTENT_SIZE } from '@shared/knowledge-base'
 import { isPdfFilePath, isTextFilePath } from '@shared/file-extensions'
 import type { CallChatCompletionOptions } from '@shared/models/types'
 import {
@@ -14,7 +15,6 @@ import {
 } from '@shared/types'
 import type { DocumentParserConfig } from '@shared/types/settings'
 import { parseKnowledgeBaseModelString } from '@shared/utils/knowledge-base-model-parser'
-import { KNOWLEDGE_BASE_MAX_FILE_SIZE, KNOWLEDGE_BASE_MAX_PARSED_CONTENT_SIZE } from '@shared/knowledge-base'
 import { parsePdfFileLocally } from '@/packages/pdf-parser'
 import type { KnowledgeBaseController } from './interface'
 
@@ -117,7 +117,13 @@ function toTextBase64(value: string): string {
 }
 
 function safeFileName(value: string): string {
-  return value.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').slice(-120) || 'document'
+  return [...value]
+    .filter((character) => {
+      const code = character.charCodeAt(0)
+      return code >= 32 && code !== 127 && !/[\\/:*?"<>|]/.test(character)
+    })
+    .join('')
+    .slice(-120) || 'document'
 }
 
 function errorMessage(error: unknown): string {
@@ -225,8 +231,8 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
     this.requestWorker()
   }
 
-  private async database(): Promise<SQLiteDBConnection> {
-    if (this.injectedDatabase) return this.injectedDatabase
+  private database(): Promise<SQLiteDBConnection> {
+    if (this.injectedDatabase) return Promise.resolve(this.injectedDatabase)
     if (!this.databasePromise) this.databasePromise = getDatabaseConnection()
     return this.databasePromise
   }
@@ -269,7 +275,7 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
     return method.call(model, {})
   }
 
-  private async getEmbeddingModel(kbId: number): Promise<EmbeddingModel> {
+  private getEmbeddingModel(kbId: number): Promise<EmbeddingModel> {
     let pending = this.embeddingModels.get(kbId)
     if (!pending) {
       pending = (async () => {
@@ -383,7 +389,7 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
         const batch = chunks.slice(offset, offset + EMBEDDING_BATCH_SIZE)
         const embeddings = await embedMany({
           model: embeddingModel,
-          values: batch.map((chunk) => 'filename: ' + filename + '\nchunk:\n' + chunk),
+          values: batch.map((chunk) => `filename: ${filename}\nchunk:\n${chunk}`),
           maxRetries: 0,
         })
         if (embeddings.embeddings.length !== batch.length) {
@@ -522,7 +528,7 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
     const kbResult = await db.query('SELECT id FROM knowledge_base WHERE id = ?', [kbId])
     if (!kbResult.values?.[0]) throw new Error('Knowledge base not found.')
     await this.ensureFilesDirectory()
-    const storedPath = FILES_DIRECTORY + '/' + uuidv4() + '-' + safeFileName(meta.name || sourceFile.name)
+    const storedPath = `${FILES_DIRECTORY}/${uuidv4()}-${safeFileName(meta.name || sourceFile.name)}`
     await this.filesystem.writeFile({
       path: storedPath,
       directory: Directory.Data,
@@ -637,7 +643,7 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
     if (!updates.length) return
     values.push(params.id)
     const db = await this.database()
-    await db.run('UPDATE knowledge_base SET ' + updates.join(', ') + ' WHERE id = ?', values)
+    await db.run(`UPDATE knowledge_base SET ${updates.join(', ')} WHERE id = ?`, values)
   }
 
   async getFilesMeta(kbId: number, fileIds: number[]) {
@@ -685,8 +691,8 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
     return results.filter((item): item is NonNullable<typeof item> => item !== null)
   }
 
-  async testMineruConnection(_apiToken: string): Promise<{ success: boolean; error?: string }> {
-    return { success: false, error: 'MinerU connection testing is not available on mobile.' }
+  testMineruConnection(_apiToken: string): Promise<{ success: boolean; error?: string }> {
+    return Promise.resolve({ success: false, error: 'MinerU connection testing is not available on mobile.' })
   }
 
   async readFileContent(fileId: number): Promise<string | null> {

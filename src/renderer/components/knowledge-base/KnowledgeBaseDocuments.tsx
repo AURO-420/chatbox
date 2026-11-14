@@ -16,13 +16,13 @@ import {
   Text,
   Textarea,
 } from '@mantine/core'
+import { isPdfFilePath, isTextFilePath } from '@shared/file-extensions'
 import {
   KNOWLEDGE_BASE_MAX_FILE_SIZE,
   KNOWLEDGE_BASE_MAX_FILE_SIZE_LABEL,
   KNOWLEDGE_BASE_PARSED_CONTENT_TOO_LARGE_ERROR,
 } from '@shared/knowledge-base'
 import type { FileMeta, KnowledgeBase, KnowledgeBaseFile } from '@shared/types'
-import { isPdfFilePath, isTextFilePath } from '@shared/file-extensions'
 import { formatFileSize } from '@shared/utils'
 import {
   IconCheck,
@@ -47,8 +47,8 @@ import { toast } from 'sonner'
 import { trackJkClickEvent } from '@/analytics/jk'
 import { JK_EVENTS, JK_PAGE_NAMES } from '@/analytics/jk-events'
 import { bucketPlausibleCount } from '@/analytics/plausible'
-import { AppTooltip as Tooltip } from '@/components/ui/tooltip'
 import { Modal } from '@/components/layout/Overlay'
+import { AppTooltip as Tooltip } from '@/components/ui/tooltip'
 import { useKnowledgeBaseFiles, useKnowledgeBaseFilesActions, useKnowledgeBaseFilesCount } from '@/hooks/knowledge-base'
 import { useChunksPreview } from '@/hooks/useChunksPreview'
 import { toastError } from '@/packages/toast'
@@ -220,7 +220,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
     const isLocalParser = effectiveParserType === 'local'
 
     const baseDocumentTypes = platform.type === 'mobile'
-      ? ['.pdf', '.docx', '.txt', '.md', '.rtf', '.pptx', '.xlsx', '.csv']
+      ? ['.pdf', '.docx', '.txt', '.md', '.pptx', '.xlsx', '.csv', '.json', '.js', '.jsx', '.ts', '.tsx', '.py', '.html', '.css', '.xml', '.yaml', '.yml', '.toml', '.sql', '.sh', '.bat', '.ps1', '.java', '.c', '.cpp', '.h', '.hpp', '.rs', '.go', '.php', '.rb', '.swift', '.kt', '.vue', '.svelte', '.ini', '.log']
       : ['.pdf', '.docx', '.txt', '.md', '.rtf', '.pptx', '.xlsx', '.csv', '.epub']
     const extendedDocumentTypes = ['.doc', '.ppt', '.xls']
     const documentTypes = isLocalParser ? baseDocumentTypes : [...baseDocumentTypes, ...extendedDocumentTypes]
@@ -232,7 +232,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'text/plain',
       'text/markdown',
-      'application/rtf',
+      ...(platform.type === 'mobile' ? [] : ['application/rtf']),
       'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'text/csv',
@@ -259,7 +259,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
       accept: allTypes.join(','),
       display: hasVisionModel ? [...documentTypes, ...imageTypes] : documentTypes,
     }
-  }, [platform.type, knowledgeBase?.documentParser?.type, knowledgeBase?.visionModel, globalDocumentParserType])
+  }, [knowledgeBase?.documentParser?.type, knowledgeBase?.visionModel, globalDocumentParserType])
 
   // Handle file upload (shared logic)
   const uploadFiles = useCallback(
@@ -511,7 +511,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
       await controller.saveFileContent(editingDocument.id, editingContent)
       if (isPdfFilePath(editingDocument.filename) || /\.docx$/i.test(editingDocument.filename)) {
         const baseName = editingDocument.filename.replace(/\.[^.]+$/, '')
-        await platform.exporter.exportTextFile(baseName + '.edited.md', editingContent)
+        await platform.exporter.exportTextFile(`${baseName}.edited.md`, editingContent)
       }
       setEditingDocument(null)
       await Promise.all([refetch(), refetchCount()])

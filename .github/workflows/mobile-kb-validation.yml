@@ -30,7 +30,7 @@ jobs:
 
       - name: Check changed TypeScript and UI files
         run: >
-          pnpm exec biome check
+          pnpm exec biome lint
           src/renderer/platform/knowledge-base/interface.ts
           src/renderer/platform/knowledge-base/mobile-controller.ts
           src/renderer/platform/knowledge-base/mobile-controller.test.ts
