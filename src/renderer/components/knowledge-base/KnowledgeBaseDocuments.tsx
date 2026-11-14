@@ -16,7 +16,7 @@ import {
   Text,
   Textarea,
 } from '@mantine/core'
-import { isPdfFilePath, isTextFilePath } from '@shared/file-extensions'
+import { isPdfFilePath, isTextFilePath, textExts } from '@shared/file-extensions'
 import {
   KNOWLEDGE_BASE_MAX_FILE_SIZE,
   KNOWLEDGE_BASE_MAX_FILE_SIZE_LABEL,
@@ -83,6 +83,9 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
   const [sizeRejectedFiles, setSizeRejectedFiles] = useState<RejectedFile[]>([])
   const [editingDocument, setEditingDocument] = useState<KnowledgeBaseFile | null>(null)
   const [editingContent, setEditingContent] = useState('')
+  const [editingPageTexts, setEditingPageTexts] = useState<Map<number, string>>(new Map())
+  const [editingPage, setEditingPage] = useState(0)
+  const [editingPageText, setEditingPageText] = useState('')
   const [isLoadingEditContent, setIsLoadingEditContent] = useState(false)
   const [isSavingEditContent, setIsSavingEditContent] = useState(false)
 
@@ -138,7 +141,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
   // Check if we should show the Chatbox AI suggestion for failed files
   // Show suggestion only if there are failed files that are NOT in the exception list
   const shouldShowChatboxAISuggestion = useMemo(() => {
-    if (failedFiles.length === 0) return false
+    if (platform.type === 'mobile' || failedFiles.length === 0) return false
     // Check if any failed file used a parser that should show the suggestion
     return failedFiles.some(
       (file) =>
@@ -219,9 +222,10 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
     const effectiveParserType = platform.type === 'mobile' ? 'local' : knowledgeBase?.documentParser?.type || globalDocumentParserType || 'local'
     const isLocalParser = effectiveParserType === 'local'
 
-    const baseDocumentTypes = platform.type === 'mobile'
-      ? ['.pdf', '.docx', '.txt', '.md', '.pptx', '.xlsx', '.csv', '.json', '.js', '.jsx', '.ts', '.tsx', '.py', '.html', '.css', '.xml', '.yaml', '.yml', '.toml', '.sql', '.sh', '.bat', '.ps1', '.java', '.c', '.cpp', '.h', '.hpp', '.rs', '.go', '.php', '.rb', '.swift', '.kt', '.vue', '.svelte', '.ini', '.log']
-      : ['.pdf', '.docx', '.txt', '.md', '.rtf', '.pptx', '.xlsx', '.csv', '.epub']
+    const baseDocumentTypes =
+      platform.type === 'mobile'
+        ? ['.pdf', '.docx', '.pptx', '.xlsx', ...textExts.filter((extension) => extension !== '.rtf')]
+        : ['.pdf', '.docx', '.txt', '.md', '.rtf', '.pptx', '.xlsx', '.csv', '.epub']
     const extendedDocumentTypes = ['.doc', '.ppt', '.xls']
     const documentTypes = isLocalParser ? baseDocumentTypes : [...baseDocumentTypes, ...extendedDocumentTypes]
     const imageTypes = platform.type === 'mobile' ? [] : ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
@@ -479,11 +483,15 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
     }
     setEditingDocument(doc)
     setEditingContent('')
+    setEditingPageTexts(new Map())
+    setEditingPage(0)
+    setEditingPageText('')
     setIsLoadingEditContent(true)
     try {
       const content = await controller.readFileContent(doc.id)
       if (content === null) throw new Error(t('The extracted document text is not available yet.'))
       setEditingContent(content)
+      setEditingPageText(content.slice(0, 100_000))
     } catch (error) {
       toastError((error as Error)?.message || t('Failed to open the document editor.'))
       setEditingDocument(null)
@@ -492,14 +500,35 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
     }
   }, [t])
 
+  const handleEditorPageChange = useCallback((nextPage: number) => {
+    const pageCount = Math.max(1, Math.ceil(editingContent.length / 100_000))
+    const targetPage = Math.min(pageCount - 1, Math.max(0, nextPage))
+    if (targetPage === editingPage) return
+
+    const pages = new Map(editingPageTexts)
+    pages.set(editingPage, editingPageText)
+    setEditingPageTexts(pages)
+    setEditingPage(targetPage)
+    setEditingPageText(
+      pages.get(targetPage) ?? editingContent.slice(targetPage * 100_000, (targetPage + 1) * 100_000)
+    )
+  }, [editingContent, editingPage, editingPageText, editingPageTexts])
+
   const handleSaveDocumentEdit = useCallback(async () => {
     if (!editingDocument) return
     const controller = platform.getKnowledgeBaseController()
     if (!controller.saveFileContent) return
 
+    const pageCount = Math.max(1, Math.ceil(editingContent.length / 100_000))
+    const pages = Array.from({ length: pageCount }, (_, pageIndex) => {
+      if (pageIndex === editingPage) return editingPageText
+      return editingPageTexts.get(pageIndex) ?? editingContent.slice(pageIndex * 100_000, (pageIndex + 1) * 100_000)
+    })
+    const nextContent = pages.join('')
+
     if (/\.json$/i.test(editingDocument.filename)) {
       try {
-        JSON.parse(editingContent)
+        JSON.parse(nextContent)
       } catch (error) {
         toastError(t('Invalid JSON: {{error}}', { error: (error as Error).message }))
         return
@@ -508,12 +537,13 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
 
     setIsSavingEditContent(true)
     try {
-      await controller.saveFileContent(editingDocument.id, editingContent)
+      await controller.saveFileContent(editingDocument.id, nextContent)
       if (isPdfFilePath(editingDocument.filename) || /\.docx$/i.test(editingDocument.filename)) {
         const baseName = editingDocument.filename.replace(/\.[^.]+$/, '')
-        await platform.exporter.exportTextFile(`${baseName}.edited.md`, editingContent)
+        await platform.exporter.exportTextFile(`${baseName}.edited.md`, nextContent)
       }
       setEditingDocument(null)
+      setEditingPageTexts(new Map())
       await Promise.all([refetch(), refetchCount()])
       if (knowledgeBase?.id) invalidateFiles(knowledgeBase.id)
     } catch (error) {
@@ -521,7 +551,18 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
     } finally {
       setIsSavingEditContent(false)
     }
-  }, [editingDocument, editingContent, refetch, refetchCount, invalidateFiles, knowledgeBase?.id, t])
+  }, [
+    editingDocument,
+    editingContent,
+    editingPage,
+    editingPageText,
+    editingPageTexts,
+    refetch,
+    refetchCount,
+    invalidateFiles,
+    knowledgeBase?.id,
+    t,
+  ])
 
   // Handle file deletion
   const handleDeleteFile = useCallback(
@@ -1196,16 +1237,45 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
           {isLoadingEditContent ? (
             <Center py="xl"><Loader size="sm" /></Center>
           ) : (
-            <Textarea
-              value={editingContent}
-              onChange={(event) => setEditingContent(event.currentTarget.value)}
-              minRows={18}
-              maxRows={26}
-              autosize
-              styles={{ input: { fontFamily: 'monospace', fontSize: '13px' } }}
-              disabled={isSavingEditContent}
-              aria-label={t('Document text')}
-            />
+            <>
+              {Math.max(1, Math.ceil(editingContent.length / 100_000)) > 1 && (
+                <Group justify="space-between" align="center">
+                  <Button
+                    size="xs"
+                    variant="default"
+                    onClick={() => handleEditorPageChange(editingPage - 1)}
+                    disabled={editingPage === 0 || isSavingEditContent}
+                  >
+                    {t('Previous')}
+                  </Button>
+                  <Text size="xs" c="dimmed">
+                    {t('Page {{current}} of {{total}}', {
+                      current: editingPage + 1,
+                      total: Math.max(1, Math.ceil(editingContent.length / 100_000)),
+                    })}
+                  </Text>
+                  <Button
+                    size="xs"
+                    variant="default"
+                    onClick={() => handleEditorPageChange(editingPage + 1)}
+                    disabled={editingPage >= Math.ceil(editingContent.length / 100_000) - 1 || isSavingEditContent}
+                  >
+                    {t('Next')}
+                  </Button>
+                </Group>
+              )}
+              <Textarea
+                value={editingPageText}
+                onChange={(event) => setEditingPageText(event.currentTarget.value)}
+                minRows={18}
+                maxRows={26}
+                autosize
+                styles={{ input: { fontFamily: 'monospace', fontSize: '13px' } }}
+                disabled={isSavingEditContent}
+                aria-label={t('Document text')}
+                spellCheck={false}
+              />
+            </>
           )}
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setEditingDocument(null)} disabled={isSavingEditContent}>
