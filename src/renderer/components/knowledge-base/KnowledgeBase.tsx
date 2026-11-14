@@ -455,7 +455,11 @@ const KnowledgeBasePage: React.FC = () => {
             <KnowledgeBaseChatboxAIInfo hasError={!chatboxAIModels} />
           ) : (
             <>
-              <DocumentParserSelector parserConfig={newDocumentParser} onParserConfigChange={setNewDocumentParser} />
+              {platform.type === 'mobile' ? (
+                <Text size="xs" c="dimmed">{t('Mobile knowledge bases use local document extraction.')}</Text>
+              ) : (
+                <DocumentParserSelector parserConfig={newDocumentParser} onParserConfigChange={setNewDocumentParser} />
+              )}
               <KnowledgeBaseModelSelectors
                 embeddingModelList={embeddingModelList}
                 rerankModelList={rerankModelList}

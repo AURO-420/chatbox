@@ -547,13 +547,15 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
   }
 
   async deleteFile(fileId: number): Promise<void> {
-    const db = await this.database()
-    const result = await db.query('SELECT filepath FROM kb_file WHERE id = ?', [fileId])
-    const path = result.values?.[0]?.filepath
-    await db.run('DELETE FROM kb_chunk_staging WHERE file_id = ?', [fileId])
-    await db.run('DELETE FROM kb_chunk WHERE file_id = ?', [fileId])
-    await db.run('DELETE FROM kb_file WHERE id = ?', [fileId])
-    if (path) await this.filesystem.deleteFile({ path: String(path), directory: Directory.Data }).catch(() => undefined)
+    await this.withFileLock(fileId, async () => {
+      const db = await this.database()
+      const result = await db.query('SELECT filepath FROM kb_file WHERE id = ?', [fileId])
+      const path = result.values?.[0]?.filepath
+      await db.run('DELETE FROM kb_chunk_staging WHERE file_id = ?', [fileId])
+      await db.run('DELETE FROM kb_chunk WHERE file_id = ?', [fileId])
+      await db.run('DELETE FROM kb_file WHERE id = ?', [fileId])
+      if (path) await this.filesystem.deleteFile({ path: String(path), directory: Directory.Data }).catch(() => undefined)
+    })
   }
 
   async retryFile(fileId: number, useRemoteParsing = false): Promise<void> {
@@ -690,8 +692,8 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
     const result = await db.query('SELECT * FROM kb_file WHERE id = ?', [fileId])
     const row = result.values?.[0] as DatabaseRow | undefined
     if (!row) return null
-    if (typeof row.content_text === 'string') return row.content_text
     if (typeof row.pending_content === 'string') return row.pending_content
+    if (typeof row.content_text === 'string') return row.content_text
     const file = await this.readStoredFile(String(row.filepath), String(row.filename), String(row.mime_type))
     return this.parseFile(file)
   }

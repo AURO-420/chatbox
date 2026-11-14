@@ -216,13 +216,15 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
 
   // Get supported file types
   const getSupportedFileTypes = useCallback(() => {
-    const effectiveParserType = knowledgeBase?.documentParser?.type || globalDocumentParserType || 'local'
+    const effectiveParserType = platform.type === 'mobile' ? 'local' : knowledgeBase?.documentParser?.type || globalDocumentParserType || 'local'
     const isLocalParser = effectiveParserType === 'local'
 
-    const baseDocumentTypes = ['.pdf', '.docx', '.txt', '.md', '.rtf', '.pptx', '.xlsx', '.csv', '.epub']
+    const baseDocumentTypes = platform.type === 'mobile'
+      ? ['.pdf', '.docx', '.txt', '.md', '.rtf', '.pptx', '.xlsx', '.csv']
+      : ['.pdf', '.docx', '.txt', '.md', '.rtf', '.pptx', '.xlsx', '.csv', '.epub']
     const extendedDocumentTypes = ['.doc', '.ppt', '.xls']
     const documentTypes = isLocalParser ? baseDocumentTypes : [...baseDocumentTypes, ...extendedDocumentTypes]
-    const imageTypes = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
+    const imageTypes = platform.type === 'mobile' ? [] : ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
 
     // Add MIME types for better Windows compatibility
     const baseDocumentMimeTypes = [
@@ -246,7 +248,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
       : [...baseDocumentMimeTypes, ...extendedDocumentMimeTypes]
     const imageMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp']
 
-    const hasVisionModel = knowledgeBase?.visionModel && knowledgeBase.visionModel.trim() !== ''
+    const hasVisionModel = platform.type !== 'mobile' && knowledgeBase?.visionModel && knowledgeBase.visionModel.trim() !== ''
 
     // Combine file extensions and MIME types for better compatibility
     const allDocumentTypes = [...documentTypes, ...documentMimeTypes]
@@ -257,7 +259,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
       accept: allTypes.join(','),
       display: hasVisionModel ? [...documentTypes, ...imageTypes] : documentTypes,
     }
-  }, [knowledgeBase?.documentParser?.type, knowledgeBase?.visionModel, globalDocumentParserType])
+  }, [platform.type, knowledgeBase?.documentParser?.type, knowledgeBase?.visionModel, globalDocumentParserType])
 
   // Handle file upload (shared logic)
   const uploadFiles = useCallback(
