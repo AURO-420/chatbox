@@ -47,7 +47,7 @@ type SessionAttachmentRagMaintenanceTask = {
 async function collectMaintenanceScope(
   source: SessionAttachmentRagMaintenanceSource
 ): Promise<SessionAttachmentRagMaintenanceScope | null> {
-  if (!platform.isDesktopLike) {
+  if (!platform.isDesktopLike && platform.type !== 'mobile') {
     return {
       sessionIds: [],
       messageIds: [],
@@ -141,7 +141,7 @@ export async function runSessionAttachmentRagMaintenancePass(options: SessionAtt
 }
 
 export function initSessionAttachmentRagMaintenance(options: SessionAttachmentRagMaintenanceOptions = {}) {
-  if (maintenanceStarted || !platform.isDesktopLike) {
+  if (maintenanceStarted || (!platform.isDesktopLike && platform.type !== 'mobile')) {
     return
   }
 
