@@ -15,8 +15,6 @@ import {
 import type { DocumentParserConfig } from '@shared/types/settings'
 import { parseKnowledgeBaseModelString } from '@shared/utils/knowledge-base-model-parser'
 import { KNOWLEDGE_BASE_MAX_FILE_SIZE, KNOWLEDGE_BASE_MAX_PARSED_CONTENT_SIZE } from '@shared/knowledge-base'
-import { currentModelFactory } from '@/adapters/CurrentModelFactory'
-import { settingsService } from '@/settings-runtime'
 import { parsePdfFileLocally } from '@/packages/pdf-parser'
 import type { KnowledgeBaseController } from './interface'
 
@@ -252,6 +250,10 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
   private async createEmbeddingModel(knowledgeBase: KnowledgeBase): Promise<EmbeddingModel> {
     const parsed = parseKnowledgeBaseModelString(knowledgeBase.embeddingModel)
     if (!parsed) throw new Error('The knowledge base embedding model is not configured correctly.')
+    const [{ currentModelFactory }, { settingsService }] = await Promise.all([
+      import('@/adapters/CurrentModelFactory'),
+      import('@/settings-runtime'),
+    ])
     const globalSettings = settingsService.getSettings()
     if (!globalSettings.providers?.[parsed.providerId]) {
       throw new Error('The provider configured for this knowledge base is not available. Check Settings → Provider.')
