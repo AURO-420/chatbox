@@ -280,17 +280,16 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
         }
 
         // Process and correct MIME types for all files
-        const correctedFiles: FileMeta[] = []
-        for (const file of uploadableFiles) {
-          const correctedFile = correctMimeType(file)
-          correctedFiles.push(correctedFile)
-        }
+        const correctedFiles = uploadableFiles.map((sourceFile) => ({
+          meta: correctMimeType(sourceFile),
+          sourceFile,
+        }))
 
         // Upload all files using allSettled to allow partial successes
         const uploadResults = await Promise.allSettled(
-          correctedFiles.map(async (file) => {
-            await knowledgeBaseController.uploadFile(knowledgeBase.id, file)
-            return file
+          correctedFiles.map(async ({ meta, sourceFile }) => {
+            await knowledgeBaseController.uploadFile(knowledgeBase.id, meta, sourceFile)
+            return meta
           })
         )
 
@@ -301,7 +300,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
         // Log individual failures
         uploadResults.forEach((result, index) => {
           if (result.status === 'rejected') {
-            const fileName = correctedFiles[index]?.name || 'Unknown file'
+            const fileName = correctedFiles[index]?.meta.name || 'Unknown file'
             console.error(`[Upload] Failed to upload file ${fileName}:`, result.reason)
             toastError(
               t('Failed to upload {{filename}}: {{error}}', {
@@ -331,7 +330,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
 
         // Track successful uploads only
         if (successfulUploads.length > 0) {
-          const uploadedFileTypes = new Set(correctedFiles.map((file) => file.type || 'unknown'))
+          const uploadedFileTypes = new Set(correctedFiles.map(({ meta }) => meta.type || 'unknown'))
           trackEvent('knowledge_base_document_added', {
             file_count: bucketPlausibleCount(successfulUploads.length),
             attempted_file_count: bucketPlausibleCount(files.length),

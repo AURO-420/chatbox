@@ -17,6 +17,7 @@ import { CHATBOX_BUILD_PLATFORM } from '@/variables'
 import { getBrowser, getOS } from '../packages/navigator'
 import type { Platform, PlatformType } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
+import { MobileKnowledgeBaseController } from './knowledge-base/mobile-controller'
 import MobileExporter from './mobile_exporter'
 import mobileLogger from './mobile_logger'
 import type { SessionAttachmentRagController } from './session-attachment-rag/interface'
@@ -33,6 +34,7 @@ export default class MobilePlatform extends MobileSQLiteStorage implements Platf
   private _imageGenerationStorage: ImageGenerationStorage | null = null
   private _sessionMetaStorage: SessionMetaStorage | null = null
   private _sessionRowStore: SessionRowStorePort | null = null
+  private _knowledgeBaseController: KnowledgeBaseController | null = null
 
   constructor() {
     super()
@@ -325,7 +327,10 @@ export default class MobilePlatform extends MobileSQLiteStorage implements Platf
   }
 
   public getKnowledgeBaseController(): KnowledgeBaseController {
-    throw new Error('Method not implemented.')
+    if (!this._knowledgeBaseController) {
+      this._knowledgeBaseController = new MobileKnowledgeBaseController()
+    }
+    return this._knowledgeBaseController
   }
 
   public getSessionAttachmentRagController(): SessionAttachmentRagController {

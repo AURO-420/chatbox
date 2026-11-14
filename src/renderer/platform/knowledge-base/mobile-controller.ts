@@ -95,7 +95,7 @@ async function initializeSchema(database: SQLiteDBConnection): Promise<void> {
   await database.execute('CREATE INDEX IF NOT EXISTS idx_kb_file_kb_created ON kb_file(kb_id, created_at DESC)')
   await database.execute('CREATE INDEX IF NOT EXISTS idx_kb_chunk_kb_file ON kb_chunk(kb_id, file_id, chunk_index)')
   await database.execute(
-    "UPDATE kb_file SET status = 'paused', processing_started_at = NULL WHERE status = 'processing'"
+    "UPDATE kb_file SET status = 'pending', processing_started_at = NULL WHERE status = 'processing'"
   )
 }
 
@@ -223,6 +223,7 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
     this.injectedDatabase = options.database
     this.embeddingModelFactory = options.embeddingModelFactory ?? this.createEmbeddingModel.bind(this)
     this.parseFile = options.parseFile ?? parseMobileDocument
+    this.requestWorker()
   }
 
   private async database(): Promise<SQLiteDBConnection> {

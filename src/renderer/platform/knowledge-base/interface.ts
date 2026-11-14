@@ -21,7 +21,9 @@ export interface KnowledgeBaseController {
   listFiles(kbId: number): Promise<KnowledgeBaseFile[]>
   countFiles(kbId: number): Promise<number>
   listFilesPaginated(kbId: number, offset?: number, limit?: number): Promise<KnowledgeBaseFile[]>
-  uploadFile(kbId: number, file: FileMeta): Promise<void>
+  uploadFile(kbId: number, file: FileMeta, sourceFile?: File): Promise<void>
+  readFileContent?(fileId: number): Promise<string | null>
+  saveFileContent?(fileId: number, content: string): Promise<void>
   deleteFile(fileId: number): Promise<void>
   retryFile(fileId: number, useRemoteParsing?: boolean): Promise<void>
   pauseFile(fileId: number): Promise<void>
