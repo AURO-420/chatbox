@@ -495,7 +495,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
     const controller = platform.getKnowledgeBaseController()
     if (!controller.saveFileContent) return
 
-    if (/\\.json$/i.test(editingDocument.filename)) {
+    if (/\.json$/i.test(editingDocument.filename)) {
       try {
         JSON.parse(editingContent)
       } catch (error) {
@@ -507,8 +507,8 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
     setIsSavingEditContent(true)
     try {
       await controller.saveFileContent(editingDocument.id, editingContent)
-      if (isPdfFilePath(editingDocument.filename) || /\\.docx$/i.test(editingDocument.filename)) {
-        const baseName = editingDocument.filename.replace(/\\.[^.]+$/, '')
+      if (isPdfFilePath(editingDocument.filename) || /\.docx$/i.test(editingDocument.filename)) {
+        const baseName = editingDocument.filename.replace(/\.[^.]+$/, '')
         await platform.exporter.exportTextFile(baseName + '.edited.md', editingContent)
       }
       setEditingDocument(null)
@@ -1071,7 +1071,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
                             )}
                             {platform.type === 'mobile' &&
                               doc.status === 'done' &&
-                              (isTextFilePath(doc.filename) || isPdfFilePath(doc.filename) || /\\.docx$/i.test(doc.filename)) && (
+                              (isTextFilePath(doc.filename) || isPdfFilePath(doc.filename) || /\.docx$/i.test(doc.filename)) && (
                                 <ActionIcon
                                   variant="subtle"
                                   color="blue"
@@ -1187,7 +1187,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
       >
         <Stack gap="sm">
           <Alert color="blue" variant="light">
-            {editingDocument && (isPdfFilePath(editingDocument.filename) || /\\.docx$/i.test(editingDocument.filename)
+            {editingDocument && (isPdfFilePath(editingDocument.filename) || /\.docx$/i.test(editingDocument.filename)
               ? t('You are editing extracted text. The original PDF / Word file will be kept unchanged; a new Markdown file will be exported after indexing succeeds.')
               : t('The source text file will be updated after the new knowledge-base index is ready. JSON files are validated before saving.'))}
           </Alert>

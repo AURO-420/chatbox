@@ -215,6 +215,7 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
   private readonly parseFile: (file: File) => Promise<string>
   private databasePromise: Promise<SQLiteDBConnection> | null = null
   private workerPromise: Promise<void> | null = null
+  private workerRequested = false
   private readonly embeddingModels = new Map<number, Promise<EmbeddingModel>>()
   private readonly fileLocks = new Map<number, Promise<void>>()
 
@@ -297,9 +298,16 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
   }
 
   private requestWorker(): void {
+    this.workerRequested = true
     if (this.workerPromise) return
-    this.workerPromise = this.runPendingFiles().finally(() => {
+    this.workerPromise = (async () => {
+      do {
+        this.workerRequested = false
+        await this.runPendingFiles()
+      } while (this.workerRequested)
+    })().finally(() => {
       this.workerPromise = null
+      if (this.workerRequested) this.requestWorker()
     })
   }
 
