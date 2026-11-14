@@ -1151,7 +1151,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
                             )}
                             {platform.type === 'mobile' &&
                               doc.status === 'done' &&
-                              (isPdfFilePath(doc.filename) || doc.filename.toLowerCase().endsWith('.docx'))) && (
+                              (isPdfFilePath(doc.filename) || doc.filename.toLowerCase().endsWith('.docx')) && (
                                 <ActionIcon
                                   variant="subtle"
                                   color="blue"
