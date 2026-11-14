@@ -8,11 +8,12 @@ import {
   resolveLocalWorkCapabilities,
   setLocalWorkCapability,
 } from '@shared/mobile-work/capabilities'
-import { IconBook, IconChevronLeft, IconChevronRight, IconDeviceMobile, IconNotes, IconPlug } from '@tabler/icons-react'
+import { IconBook, IconCheck, IconChevronLeft, IconChevronRight, IconDeviceMobile, IconFile, IconNotes, IconPlug, IconVocabulary } from '@tabler/icons-react'
 import { forwardRef, useImperativeHandle, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { rendererApplication } from '@/app/renderer-application'
 import { MCPConnectionSummary } from '@/components/mcp/MCPConnectionSummary'
+import { useKnowledgeBases } from '@/hooks/knowledge-base'
 import { useSessionLockState } from '@/hooks/useSessionLockState'
 import { useSessionPresentation } from '@/hooks/useSessionPresentation'
 import { navigateToSettings } from '@/modals/settings-navigation'
@@ -42,12 +43,16 @@ const MobileAgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProp
     modelSupportsAgentMode = true,
     webBrowsingMode,
     onWebBrowsingChange,
+    currentKnowledgeBaseId,
+    onKnowledgeBaseSelect,
     onClose,
   },
   ref
 ) {
   const { t } = useTranslation()
-  const [page, setPage] = useState<'main' | 'services' | 'memory'>('main')
+  const [page, setPage] = useState<'main' | 'services' | 'memory' | 'knowledge-base'>('main')
+  const { data: knowledgeBases } = useKnowledgeBases()
+  const selectedKnowledgeBase = knowledgeBases?.find((kb) => kb.id === currentKnowledgeBaseId)
   useImperativeHandle(
     ref,
     () => ({
@@ -145,6 +150,77 @@ const MobileAgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProp
     } finally {
       setSaving(false)
     }
+  }
+
+
+  if (page === 'knowledge-base') {
+    return (
+      <Stack gap="sm" p="md" style={{ maxHeight: '70dvh', overflowY: 'auto' }}>
+        <Group gap="xs">
+          <ActionIcon
+            data-testid={TestId.agent.modePanelBack}
+            variant="subtle"
+            size={36}
+            aria-label={t('Back')}
+            onClick={() => setPage('main')}
+          >
+            <IconChevronLeft size={18} />
+          </ActionIcon>
+          <Text size="sm" fw={600}>
+            {t('Knowledge Base')}
+          </Text>
+        </Group>
+        {knowledgeBases && knowledgeBases.length > 0 ? (
+          knowledgeBases.map((kb) => (
+            <UnstyledButton
+              key={kb.id}
+              aria-label={kb.name}
+              onClick={() => {
+                onKnowledgeBaseSelect(kb.id === currentKnowledgeBaseId ? null : kb)
+                onClose()
+              }}
+              style={{ minHeight: 44, paddingInline: 8 }}
+            >
+              <Group justify="space-between" wrap="nowrap">
+                <Group gap="xs">
+                  <IconFile size={16} />
+                  <Text size="sm" c={kb.id === currentKnowledgeBaseId ? 'chatbox-brand' : undefined}>
+                    {kb.name}
+                  </Text>
+                </Group>
+                {kb.id === currentKnowledgeBaseId && <IconCheck size={16} color="var(--chatbox-tint-brand)" />}
+              </Group>
+            </UnstyledButton>
+          ))
+        ) : (
+          <Stack align="center" gap="xs" py="md">
+            <Text size="sm" c="dimmed">
+              {t('No Knowledge Base Yet')}
+            </Text>
+            <Button
+              size="xs"
+              variant="light"
+              onClick={() => {
+                onClose()
+                navigateToSettings('/knowledge-base')
+              }}
+            >
+              {t('Create')}
+            </Button>
+          </Stack>
+        )}
+        <Button
+          variant="subtle"
+          size="xs"
+          onClick={() => {
+            onClose()
+            navigateToSettings('/knowledge-base')
+          }}
+        >
+          {t('Manage Knowledge Bases')}
+        </Button>
+      </Stack>
+    )
   }
 
   if (page === 'memory') {
@@ -334,6 +410,27 @@ const MobileAgentModePanel = forwardRef<AgentModePanelHandle, AgentModePanelProp
               ) : (
                 <Text size="xs" c="dimmed">
                   {t('Enabled in Work Mode')}
+                </Text>
+              )}
+            </Stack>
+          </Group>
+          <IconChevronRight size={16} />
+        </Group>
+      </UnstyledButton>
+
+      <UnstyledButton
+        aria-label={t('Knowledge Base')}
+        onClick={() => setPage('knowledge-base')}
+        style={{ minHeight: 44 }}
+      >
+        <Group justify="space-between" wrap="nowrap">
+          <Group gap="xs">
+            <IconVocabulary size={18} />
+            <Stack gap={2}>
+              <Text size="sm">{t('Knowledge Base')}</Text>
+              {selectedKnowledgeBase && (
+                <Text size="xs" c="dimmed" lineClamp={1}>
+                  {selectedKnowledgeBase.name}
                 </Text>
               )}
             </Stack>
