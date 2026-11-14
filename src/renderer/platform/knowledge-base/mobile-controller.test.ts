@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chunkKnowledgeBaseText, cosineSimilarity } from './mobile-controller'
+import { chunkKnowledgeBaseText, cosineSimilarity, safeKnowledgeBaseFileName } from './mobile-controller'
 
 describe('mobile knowledge-base text utilities', () => {
   it('returns no chunks for empty text and normalizes line endings', () => {
@@ -20,6 +20,11 @@ describe('mobile knowledge-base text utilities', () => {
     const chunks = chunkKnowledgeBaseText(source)
     expect(chunks[0]).not.toContain('\n')
     expect(chunks.join('').length).toBeGreaterThan(0)
+  })
+
+  it('removes unsafe path characters from stored file names', () => {
+    expect(safeKnowledgeBaseFileName('../notes:today?.txt')).toBe('.._notes_today_.txt')
+    expect(safeKnowledgeBaseFileName('')).toBe('document')
   })
 
   it('computes cosine similarity and safely handles empty or mismatched vectors', () => {

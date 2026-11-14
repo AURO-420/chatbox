@@ -116,7 +116,7 @@ function toTextBase64(value: string): string {
   return toBase64(new TextEncoder().encode(value))
 }
 
-function safeFileName(value: string): string {
+export function safeKnowledgeBaseFileName(value: string): string {
   return [...value]
     .filter((character) => {
       const code = character.charCodeAt(0)
@@ -531,7 +531,7 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
     const kbResult = await db.query('SELECT id FROM knowledge_base WHERE id = ?', [kbId])
     if (!kbResult.values?.[0]) throw new Error('Knowledge base not found.')
     await this.ensureFilesDirectory()
-    const storedPath = `${FILES_DIRECTORY}/${uuidv4()}-${safeFileName(meta.name || sourceFile.name)}`
+    const storedPath = `${FILES_DIRECTORY}/${uuidv4()}-${safeKnowledgeBaseFileName(meta.name || sourceFile.name)}`
     await this.filesystem.writeFile({
       path: storedPath,
       directory: Directory.Data,
