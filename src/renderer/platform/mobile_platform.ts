@@ -21,6 +21,7 @@ import { MobileKnowledgeBaseController } from './knowledge-base/mobile-controlle
 import MobileExporter from './mobile_exporter'
 import mobileLogger from './mobile_logger'
 import type { SessionAttachmentRagController } from './session-attachment-rag/interface'
+import { MobileSessionAttachmentRagController } from './session-attachment-rag/mobile-controller'
 import { MobileSQLiteStorage } from './storages'
 import { parseFileLocallyInBrowser } from './web_platform_utils'
 
@@ -35,6 +36,7 @@ export default class MobilePlatform extends MobileSQLiteStorage implements Platf
   private _sessionMetaStorage: SessionMetaStorage | null = null
   private _sessionRowStore: SessionRowStorePort | null = null
   private _knowledgeBaseController: KnowledgeBaseController | null = null
+  private _sessionAttachmentRagController: SessionAttachmentRagController | null = null
 
   constructor() {
     super()
