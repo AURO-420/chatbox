@@ -479,6 +479,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
       toastError(t('Replacing knowledge-base files is not available on this platform.'))
       return
     }
+    const replaceFile = controller.replaceFile.bind(controller)
     const extension = doc.filename.slice(doc.filename.lastIndexOf('.')).toLowerCase()
     const input = document.createElement('input')
     input.type = 'file'
@@ -492,7 +493,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
         return
       }
       try {
-        await controller.replaceFile(doc.id, correctMimeType(replacement), replacement)
+        await replaceFile(doc.id, correctMimeType(replacement), replacement)
         toast.success(t('Successfully replaced {{filename}}', { filename: doc.filename }))
         await Promise.all([refetch(), refetchCount()])
         if (knowledgeBase?.id) invalidateFiles(knowledgeBase.id)
