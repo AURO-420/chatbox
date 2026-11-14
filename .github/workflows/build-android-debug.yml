@@ -1,0 +1,100 @@
+name: Android Debug APK
+
+on:
+  push:
+    branches:
+      - feature/mobile-kb-file-editor
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      CHATBOX_BUILD_TARGET: mobile_app
+      CHATBOX_BUILD_PLATFORM: android
+      NODE_ENV: production
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.1
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Verify Android SDK
+        run: |
+          test -x "$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"
+          "$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager" --version
+
+      - name: Accept Android SDK licenses
+        run: |
+          printf 'y\n%.0s' {1..100} | "$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager" --licenses
+
+      - name: Install Android API 35
+        run: |
+          "$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager" \
+            "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: Build mobile renderer
+        run: pnpm run build:renderer
+
+      - name: Generate Android project
+        run: pnpm exec cap add android
+
+      - name: Sync Capacitor
+        run: pnpm exec cap sync android
+
+      - name: Assemble Debug APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Package complete source and Android project
+        run: |
+          mkdir -p artifacts/Chatbox
+          git archive HEAD | tar -x -C artifacts/Chatbox
+          cp -a android artifacts/Chatbox/android
+          mkdir -p artifacts/Chatbox/apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/Chatbox/apk/
+          cd artifacts
+          zip -qr ../Chatbox-Android-Project.zip Chatbox \
+            -x 'Chatbox/android/.gradle/*' 'Chatbox/android/**/build/*'
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chatbox-Android-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload complete project
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chatbox-Android-Project
+          path: Chatbox-Android-Project.zip
+          if-no-files-found: error
+          retention-days: 14
