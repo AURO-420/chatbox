@@ -600,28 +600,40 @@ export class MobileKnowledgeBaseController implements KnowledgeBaseController {
     const queryEmbedding = await embedMany({ model, values: [query.trim()], maxRetries: 0 })
     const vector = queryEmbedding.embeddings[0]
     if (!vector) return []
-    const result = await db.query(
-      'SELECT id, file_id, filename, mime_type, chunk_index, text, embedding FROM kb_chunk WHERE kb_id = ?',
-      [kbId]
-    )
-    const scored = (result.values ?? []).map((row) => {
-      let embedding: number[] = []
-      try {
-        embedding = JSON.parse(String(row.embedding)) as number[]
-      } catch {
-        embedding = []
+
+    const batchSize = 256
+    let offset = 0
+    const bestMatches: KnowledgeBaseSearchResult[] = []
+    while (true) {
+      const result = await db.query(
+        'SELECT id, file_id, filename, mime_type, chunk_index, text, embedding ' +
+          'FROM kb_chunk WHERE kb_id = ? ORDER BY id LIMIT ? OFFSET ?',
+        [kbId, batchSize, offset]
+      )
+      const rows = result.values ?? []
+      for (const row of rows) {
+        let embedding: number[] = []
+        try {
+          embedding = JSON.parse(String(row.embedding)) as number[]
+        } catch {
+          embedding = []
+        }
+        bestMatches.push({
+          id: Number(row.id),
+          score: cosineSimilarity(vector, embedding),
+          text: String(row.text ?? ''),
+          fileId: Number(row.file_id),
+          filename: String(row.filename ?? ''),
+          mimeType: String(row.mime_type ?? ''),
+          chunkIndex: Number(row.chunk_index ?? 0),
+        })
       }
-      return {
-        id: Number(row.id),
-        score: cosineSimilarity(vector, embedding),
-        text: String(row.text ?? ''),
-        fileId: Number(row.file_id),
-        filename: String(row.filename ?? ''),
-        mimeType: String(row.mime_type ?? ''),
-        chunkIndex: Number(row.chunk_index ?? 0),
-      }
-    })
-    return scored.sort((left, right) => right.score - left.score).slice(0, 20)
+      bestMatches.sort((left, right) => right.score - left.score)
+      bestMatches.length = Math.min(bestMatches.length, 20)
+      offset += rows.length
+      if (rows.length < batchSize) break
+    }
+    return bestMatches
   }
 
   async update(params: { id: number; name?: string; rerankModel?: string; visionModel?: string }): Promise<void> {

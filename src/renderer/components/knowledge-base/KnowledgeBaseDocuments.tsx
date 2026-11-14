@@ -540,7 +540,15 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
       await controller.saveFileContent(editingDocument.id, nextContent)
       if (isPdfFilePath(editingDocument.filename) || /\.docx$/i.test(editingDocument.filename)) {
         const baseName = editingDocument.filename.replace(/\.[^.]+$/, '')
-        await platform.exporter.exportTextFile(`${baseName}.edited.md`, nextContent)
+        try {
+          await platform.exporter.exportTextFile(`${baseName}.edited.md`, nextContent)
+        } catch (exportError) {
+          toastError(
+            t('The knowledge-base index was updated, but exporting the edited text failed: {{error}}', {
+              error: exportError instanceof Error ? exportError.message : String(exportError),
+            })
+          )
+        }
       }
       setEditingDocument(null)
       setEditingPageTexts(new Map())
